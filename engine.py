@@ -1,3 +1,7 @@
+import json
+import csv
+from datetime import date
+
 # --- MODULE 1 : ZFE (GEO) ---
 
 def is_in_bounding_box(lat, lon, polygon):
@@ -13,7 +17,7 @@ def is_point_in_polygon(lat, lon, polygon):
     # Algorithme Ray Casting
     inside = False
     n = len(polygon)
-    p1 = polygon
+    p1 = polygon[0]  # FIX: était polygon (la liste entière)
     for i in range(1, n + 1):
         p2 = polygon[i % n]
         if lon > min(p1['lon'], p2['lon']):
@@ -21,8 +25,9 @@ def is_point_in_polygon(lat, lon, polygon):
                 if lat <= max(p1['lat'], p2['lat']):
                     if p1['lon'] != p2['lon']:
                         xints = (lon - p1['lon']) * (p2['lat'] - p1['lat']) / (p2['lon'] - p1['lon']) + p1['lat']
-                    if p1['lat'] == p2['lat'] or lat <= xints:
-                        inside = not inside
+                        # FIX: if imbriqué pour éviter UnboundLocalError sur xints
+                        if p1['lat'] == p2['lat'] or lat <= xints:
+                            inside = not inside
         p1 = p2
     return inside
 
@@ -35,16 +40,26 @@ def run_zfe_check(polygon_file, gps_file):
     for point in traces:
         if is_point_in_polygon(point['lat'], point['lon'], polygon):
             print(f"[ALERT ZFE] Camion {point['id']} à {point['timestamp']} - Position: {point['lat']},{point['lon']}")
+
 # --- MODULE 2 : SAFETY (PHYSICS) ---
-def analyze_safety(acc_file):
+
+def analyze_safety(acc_file, vehicle_id=None, analysis_date=None):
     harsh_braking_events = []
     max_deceleration = 0
+    detected_vehicle_id = vehicle_id
+    detected_date = analysis_date or str(date.today())
 
     with open(acc_file, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
+            # Récupération dynamique du vehicle_id et de la date depuis les données
+            if detected_vehicle_id is None and 'vehicle_id' in row:
+                detected_vehicle_id = row['vehicle_id']
+            if 'date' in row and analysis_date is None:
+                detected_date = row['date']
+
             acc_y = float(row['acc_y'])
-            # Seuil de détection selon l'énoncé : < -2.5 m/s²
+            # Seuil de détection : < -2.5 m/s²
             if acc_y < -2.5:
                 event = {
                     "timestamp": row['timestamp'],
@@ -55,8 +70,8 @@ def analyze_safety(acc_file):
                     max_deceleration = acc_y
 
     daily_score = {
-        "vehicle_id": "GML-TRUCK-50",
-        "date": "2026-06-08",
+        "vehicle_id": detected_vehicle_id or "UNKNOWN",
+        "date": detected_date,
         "summary": {
             "harsh_braking_count": len(harsh_braking_events),
             "peak_deceleration": max_deceleration,
@@ -71,6 +86,5 @@ def analyze_safety(acc_file):
 
 # --- EXECUTION DU POC ---
 if __name__ == "__main__":
-    # Simulation du moteur
     run_zfe_check('lyon_polygon.json', 'truck_gps.json')
     analyze_safety('accelerometer_data.csv')
