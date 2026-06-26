@@ -59,8 +59,9 @@ def analyze_safety(acc_file, vehicle_id=None, analysis_date=None):
                 detected_date = row['date']
 
             acc_y = float(row['acc_y'])
-            # Seuil de détection : < -2.5 m/s²
-            if acc_y < -2.5:
+            # Seuil de détection : magnitude > 2.5G (énoncé)
+            # abs() pour capturer freinage (négatif) ET choc avant (positif)
+            if abs(acc_y) > 2.5:
                 event = {
                     "timestamp": row['timestamp'],
                     "force_g": acc_y
