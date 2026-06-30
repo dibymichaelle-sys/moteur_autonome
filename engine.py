@@ -17,19 +17,41 @@ def is_in_bounding_box(lat, lon, polygon):
     return min(lats) <= lat <= max(lats) and min(lons) <= lon <= max(lons)
 
 
+def is_on_segment(lat, lon, p1, p2):
+    """
+    Vérifie si le point (lat, lon) se trouve exactement sur le segment [p1, p2].
+    Utilisé pour inclure les points sur la bordure du polygone.
+    """
+    # Le point doit être dans le rectangle englobant du segment
+    if not (min(p1['lat'], p2['lat']) <= lat <= max(p1['lat'], p2['lat']) and
+            min(p1['lon'], p2['lon']) <= lon <= max(p1['lon'], p2['lon'])):
+        return False
+    # Vérification de la colinéarité via le produit vectoriel (= 0 si aligné)
+    cross = (p2['lat'] - p1['lat']) * (lon - p1['lon']) - (p2['lon'] - p1['lon']) * (lat - p1['lat'])
+    return abs(cross) < 1e-10
+
+
 def is_point_in_polygon(lat, lon, polygon):
     """
     Algorithme Ray Casting : on lance un rayon horizontal depuis le point
     et on compte combien de fois il coupe les arêtes du polygone.
     - Nombre impair de croisements → point INSIDE
     - Nombre pair               → point OUTSIDE
+    Les points sur la bordure sont également considérés INSIDE.
     """
     # Étape 1 : filtre rapide par bounding box
     if not is_in_bounding_box(lat, lon, polygon):
         return False
 
-    inside = False
     n = len(polygon)
+
+    # Étape 2 : vérification bordure — un point sur une arête est IN
+    for i in range(n):
+        if is_on_segment(lat, lon, polygon[i], polygon[(i + 1) % n]):
+            return True
+
+    # Étape 3 : Ray Casting pour les points strictement intérieurs
+    inside = False
     p1 = polygon[0]  # on commence par le premier sommet du polygone
 
     for i in range(1, n + 1):
