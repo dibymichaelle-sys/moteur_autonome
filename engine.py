@@ -17,19 +17,41 @@ def is_in_bounding_box(lat, lon, polygon):
     return min(lats) <= lat <= max(lats) and min(lons) <= lon <= max(lons)
 
 
+def is_on_segment(lat, lon, p1, p2):
+    """
+    Vérifie si le point (lat, lon) se trouve exactement sur le segment [p1, p2].
+    Utilisé pour inclure les points sur la bordure du polygone.
+    """
+    # Le point doit être dans le rectangle englobant du segment
+    if not (min(p1['lat'], p2['lat']) <= lat <= max(p1['lat'], p2['lat']) and
+            min(p1['lon'], p2['lon']) <= lon <= max(p1['lon'], p2['lon'])):
+        return False
+    # Vérification de la colinéarité via le produit vectoriel (= 0 si aligné)
+    cross = (p2['lat'] - p1['lat']) * (lon - p1['lon']) - (p2['lon'] - p1['lon']) * (lat - p1['lat'])
+    return abs(cross) < 1e-10
+
+
 def is_point_in_polygon(lat, lon, polygon):
     """
     Algorithme Ray Casting : on lance un rayon horizontal depuis le point
     et on compte combien de fois il coupe les arêtes du polygone.
     - Nombre impair de croisements → point INSIDE
     - Nombre pair               → point OUTSIDE
+    Les points sur la bordure sont également considérés INSIDE.
     """
     # Étape 1 : filtre rapide par bounding box
     if not is_in_bounding_box(lat, lon, polygon):
         return False
 
-    inside = False
     n = len(polygon)
+
+    # Étape 2 : vérification bordure — un point sur une arête est IN
+    for i in range(n):
+        if is_on_segment(lat, lon, polygon[i], polygon[(i + 1) % n]):
+            return True
+
+    # Étape 3 : Ray Casting pour les points strictement intérieurs
+    inside = False
     p1 = polygon[0]  # on commence par le premier sommet du polygone
 
     for i in range(1, n + 1):
@@ -81,13 +103,20 @@ def run_zfe_check(polygon_file, gps_file):
 # =============================================================================
 # MODULE 2 : Safety (Physique)
 # Objectif : identifier les freinages violents dans les données accéléromètre.
+# Format CSV attendu : timestamp,acc_x,acc_y,acc_z (timestamps Unix)
 # =============================================================================
 
-def analyze_safety(acc_file, vehicle_id=None, analysis_date=None):
+def analyze_safety(acc_file, vehicle_id="UNKNOWN", analysis_date=None):
     """
-    Lit le fichier CSV accéléromètre et applique un filtrage par seuil :
-    tout échantillon dont la valeur absolue dépasse 2.5G est un freinage violent.
+    Lit le fichier CSV accéléromètre (colonnes : timestamp, acc_x, acc_y, acc_z)
+    et applique un filtrage par seuil : tout échantillon dont la valeur absolue
+    dépasse 2.5G est un freinage violent.
     Génère un fichier daily_score.json avec le bilan de la journée.
+
+    Paramètres :
+      acc_file      : chemin vers le fichier CSV
+      vehicle_id    : identifiant du véhicule (optionnel)
+      analysis_date : date d'analyse au format YYYY-MM-DD (défaut : aujourd'hui)
     """
     # Vérification existence du fichier avant d'ouvrir
     try:
@@ -98,18 +127,11 @@ def analyze_safety(acc_file, vehicle_id=None, analysis_date=None):
 
     harsh_braking_events = []
     max_deceleration = 0
-    detected_vehicle_id = vehicle_id
-    detected_date = analysis_date or str(date.today())
+    analysis_date = analysis_date or str(date.today())
 
     with open(acc_file, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # Récupération dynamique du vehicle_id et de la date depuis les données
-            if detected_vehicle_id is None and 'vehicle_id' in row:
-                detected_vehicle_id = row['vehicle_id']
-            if 'date' in row and analysis_date is None:
-                detected_date = row['date']
-
             acc_y = float(row['acc_y'])
 
             # Seuil : magnitude > 2.5G (valeur absolue pour capturer
@@ -126,8 +148,8 @@ def analyze_safety(acc_file, vehicle_id=None, analysis_date=None):
 
     # Construction du rapport journalier
     daily_score = {
-        "vehicle_id": detected_vehicle_id or "UNKNOWN",
-        "date": detected_date,
+        "vehicle_id": vehicle_id,
+        "date": analysis_date,
         "summary": {
             "harsh_braking_count": len(harsh_braking_events),
             "peak_deceleration": max_deceleration,
@@ -149,4 +171,4 @@ def analyze_safety(acc_file, vehicle_id=None, analysis_date=None):
 
 if __name__ == "__main__":
     run_zfe_check('lyon_polygon.json', 'truck_gps.json')
-    analyze_safety('accelerometer_data.csv')
+    analyze_safety('accelerometer_data.csv', vehicle_id="GML-TRUCK-50")
