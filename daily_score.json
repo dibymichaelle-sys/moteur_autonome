@@ -1,23 +1,15 @@
 {
     "vehicle_id": "GML-TRUCK-50",
-    "date": "2026-06-08",
+    "date": "2026-06-30",
     "summary": {
-        "harsh_braking_count": 3,
-        "peak_deceleration": -4.2,
+        "harsh_braking_count": 1,
+        "peak_deceleration": -3.45,
         "safety_rating": "DANGER"
     },
     "events": [
         {
-            "timestamp": "08:00:02",
-            "force_g": -3.1
-        },
-        {
-            "timestamp": "08:00:03",
-            "force_g": -2.8
-        },
-        {
-            "timestamp": "08:00:06",
-            "force_g": -4.2
+            "timestamp": "1678880005",
+            "force_g": -3.45
         }
     ]
 }
